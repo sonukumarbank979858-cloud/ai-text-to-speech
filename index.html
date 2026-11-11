@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AI Text to Speech — इंसानी आवाज़</title>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="config.js" onerror="window.DEFAULT_KEY=''"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -162,17 +163,24 @@ function voiceChg(){$('clonebox').classList.toggle('hide',$('voice').value!=='__
 const fst=m=>$('fst').textContent=m;
 function b64(buf){const u=new Uint8Array(buf);let s='';for(let i=0;i<u.length;i+=32768)s+=String.fromCharCode.apply(null,u.subarray(i,i+32768));return btoa(s);}
 function putText(t){$('txt').value=t.trim();cnt();localStorage.setItem('tts_draft',$('txt').value);fst('✅ text आ गया ('+t.length+' अक्षर)। अब "आवाज़ बनाएँ" दबाएँ।');if($('autogo').checked)generate();}
-const TXTMODELS=['gemini-3.8-flash','gemini-3.6-flash','gemini-flash-latest','gemini-2.5-flash'];
+const TXTMODELS=['gemini-3.8-flash','gemini-3.5-flash-lite','gemini-3.1-flash-lite','gemini-3.6-flash','gemini-flash-lite-latest','gemini-flash-latest','gemini-2.5-flash-lite'];
 async function gText(parts,extra){let last='';
  for(const m of TXTMODELS){for(let a=0;a<3;a++){
   const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key()},body:JSON.stringify(Object.assign({contents:[{parts}],generationConfig:{temperature:0}},extra||{}))});
   const j=await r.json().catch(()=>({}));
   if(r.ok){const t=(j?.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('');if(t.trim())return t;last='खाली जवाब';break;}
   last=j?.error?.message||('Error '+r.status);
-  if(r.status===429||r.status>=500){fst('⏳ Google व्यस्त है, दोबारा कोशिश...');await new Promise(z=>setTimeout(z,(a+1)*8000));continue;}
-  break;}}
+  if(r.status>=500&&a<1){fst('⏳ Google व्यस्त है, दोबारा कोशिश...');await new Promise(z=>setTimeout(z,5000));continue;}
+  fst('⏳ दूसरा model आज़मा रहा है...');break;}}
  throw new Error(last);}
-async function pdfToText(buf){if(!key())throw new Error('API Key नहीं मिली');
+async function pdfLocal(buf){if(!window.pdfjsLib)return '';pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+ const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf.slice(0))}).promise;let out='';
+ for(let p=1;p<=pdf.numPages;p++){fst(`⏳ PDF पढ़ रहा है... पेज ${p}/${pdf.numPages}`);const c=await (await pdf.getPage(p)).getTextContent();
+  let line='',lastY=null;c.items.forEach(it=>{const y=it.transform[5];if(lastY!==null&&Math.abs(y-lastY)>4){out+=line.trim()+'\n';line='';}line+=it.str+(it.hasEOL?' ':'');lastY=y;});out+=line.trim()+'\n\n';}
+ return out.normalize('NFC');}
+function goodText(t){const s=t.replace(/\s/g,'');if(s.length<200)return false;const bad=(s.match(/[\uFFFD\u0000-\u001F]|[ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞß]/g)||[]).length;return bad/s.length<0.02;}
+async function pdfToText(buf){try{const t=await pdfLocal(buf);if(goodText(t))return t;}catch(e){}
+ if(!key())throw new Error('API Key नहीं मिली');
  if(buf.byteLength>19e6)throw new Error('PDF 19 MB से बड़ी है — छोटी PDF डालें');
  fst('⏳ PDF से text निकाल रहा है (हिंदी/स्कैन PDF भी चलेगी)...');
  return gText([{inline_data:{mime_type:'application/pdf',data:b64(buf)}},{text:PROMPT}]);}
