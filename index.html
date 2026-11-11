@@ -117,6 +117,8 @@ input[type=range]{padding:0}
 <div id="status"></div>
 <audio id="player" controls class="hide"></audio>
 <div class="half hide" id="after"><button class="btn btn2" onclick="download()">⬇️ डाउनलोड</button><button class="btn btn2 hide" id="stopb" onclick="STOP=true">⏹ रोकें</button></div>
+<button class="btn hide" id="resume" onclick="resumeJob()">▶️ आगे जारी रखें (जहाँ रुका था)</button>
+<p class="small">⏱️ लंबा audio (1–2 घंटे) भी बन सकता है — text अपने-आप हिस्सों में बनता है। Google की रोज़ की free limit बीच में खत्म हो जाए तो जितना बना वो डाउनलोड करें, और limit नई होने पर (दोपहर 1:30 बजे) "आगे जारी रखें" दबाएँ। पेज बंद न करें।</p>
 </div>
 
 <div class="card"><b>🔗 Merge Audio — कई ऑडियो जोड़कर एक बनाएँ</b>
@@ -160,29 +162,33 @@ function voiceChg(){$('clonebox').classList.toggle('hide',$('voice').value!=='__
 const fst=m=>$('fst').textContent=m;
 function b64(buf){const u=new Uint8Array(buf);let s='';for(let i=0;i<u.length;i+=32768)s+=String.fromCharCode.apply(null,u.subarray(i,i+32768));return btoa(s);}
 function putText(t){$('txt').value=t.trim();cnt();localStorage.setItem('tts_draft',$('txt').value);fst('✅ text आ गया ('+t.length+' अक्षर)। अब "आवाज़ बनाएँ" दबाएँ।');if($('autogo').checked)generate();}
+const TXTMODELS=['gemini-3.8-flash','gemini-3.6-flash','gemini-flash-latest','gemini-2.5-flash'];
+async function gText(parts,extra){let last='';
+ for(const m of TXTMODELS){for(let a=0;a<3;a++){
+  const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key()},body:JSON.stringify(Object.assign({contents:[{parts}],generationConfig:{temperature:0}},extra||{}))});
+  const j=await r.json().catch(()=>({}));
+  if(r.ok){const t=(j?.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('');if(t.trim())return t;last='खाली जवाब';break;}
+  last=j?.error?.message||('Error '+r.status);
+  if(r.status===429||r.status>=500){fst('⏳ Google व्यस्त है, दोबारा कोशिश...');await new Promise(z=>setTimeout(z,(a+1)*8000));continue;}
+  break;}}
+ throw new Error(last);}
 async function pdfToText(buf){if(!key())throw new Error('API Key नहीं मिली');
  if(buf.byteLength>19e6)throw new Error('PDF 19 MB से बड़ी है — छोटी PDF डालें');
  fst('⏳ PDF से text निकाल रहा है (हिंदी/स्कैन PDF भी चलेगी)...');
- const body={contents:[{parts:[{inline_data:{mime_type:'application/pdf',data:b64(buf)}},{text:'इस PDF का पूरा text ठीक वैसा ही, पढ़ने के क्रम में, उसी भाषा में लिखो। page number, header-footer, कोई टिप्पणी या markdown मत जोड़ो। तालिका हो तो वाक्यों में लिखो।'}]}],generationConfig:{temperature:0,maxOutputTokens:65000}};
- for(let a=0;a<3;a++){const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key()},body:JSON.stringify(body)});
-  const j=await r.json().catch(()=>({}));if(r.ok){const t=(j?.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('');if(t.trim())return t;}
-  if(r.status===429||r.status>=500||r.ok){fst('⏳ Google व्यस्त है, दोबारा कोशिश...');await new Promise(z=>setTimeout(z,(a+1)*8000));continue;}
-  throw new Error(j?.error?.message||('Error '+r.status));}
- throw new Error('PDF नहीं पढ़ी जा सकी');}
+ return gText([{inline_data:{mime_type:'application/pdf',data:b64(buf)}},{text:PROMPT}]);}
+const PROMPT='इस फ़ाइल का पूरा text ठीक वैसा ही, पढ़ने के क्रम में, उसी भाषा में लिखो। page number, header-footer, कोई टिप्पणी या markdown मत जोड़ो। तालिका हो तो वाक्यों में लिखो।';
 async function loadFile(inp){const f=inp.files[0];if(!f)return;
  try{const buf=await f.arrayBuffer();
   if(/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name))putText(await pdfToText(buf));
   else putText(new TextDecoder().decode(buf));}catch(e){fst('❌ '+e.message);}inp.value='';}
 async function loadDrive(){const u=$('dlink').value.trim();const m=u.match(/\/d\/([\w-]{20,})/)||u.match(/[?&]id=([\w-]{20,})/);
- if(!m)return fst('⚠️ सही Drive link डालें');const id=m[1];
- try{fst('⏳ Drive से फ़ाइल ला रहा है...');
-  if(/docs\.google\.com\/document/.test(u)){const r=await fetch(`https://www.googleapis.com/drive/v3/files/${id}/export?mimeType=text/plain&key=${key()}`);if(!r.ok)throw new Error('Doc नहीं खुला — sharing "Anyone with the link" करें');return putText(await r.text());}
-  const r=await fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media&key=${key()}`);
-  if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error((j?.error?.message||('Drive error '+r.status))+' — फ़ाइल को "Anyone with the link" पर share करें, या फ़ाइल download करके upload करें');}
-  const ct=r.headers.get('content-type')||'',buf=await r.arrayBuffer();
-  if(/pdf/.test(ct)||new TextDecoder().decode(buf.slice(0,5))==='%PDF-')putText(await pdfToText(buf));
-  else putText(new TextDecoder().decode(buf));
- }catch(e){fst('❌ '+e.message);}}
+ if(!m)return fst('⚠️ सही Drive link डालें');const id=m[1];if(!key())return fst('⚠️ API Key नहीं मिली');
+ const url=/docs\.google\.com\/document/.test(u)?`https://docs.google.com/document/d/${id}/export?format=txt`:`https://drive.google.com/uc?export=download&id=${id}`;
+ try{fst('⏳ Drive से फ़ाइल पढ़ रहा है...');
+  const t=await gText([{text:PROMPT+'\nफ़ाइल: '+url}],{tools:[{url_context:{}}]});
+  if(/cannot|unable|not able|access|नहीं खोल|उपलब्ध नहीं/i.test(t.slice(0,200))&&t.length<400)throw new Error(t);
+  putText(t);
+ }catch(e){fst('❌ Drive फ़ाइल नहीं पढ़ी जा सकी ('+e.message.slice(0,150)+') — फ़ाइल "Anyone with the link" पर share करें, या download करके ऊपर upload करें');}}
 const key=()=>($('key').value.trim()||window.DEFAULT_KEY||'');
 const st=(m)=>$('status').textContent=m;
 function prog(p){$('bar').style.display=p==null?'none':'block';$('barf').style.width=(p||0)+'%';}
@@ -215,6 +221,19 @@ function mp3Blob(pcm){const s=new Int16Array(pcm.buffer,pcm.byteOffset,pcm.lengt
  const f=e.flush();if(f.length)out.push(new Uint8Array(f));return new Blob(out,{type:'audio/mpeg'});}
 const join=b=>{const n=b.reduce((a,x)=>a+x.length,0),o=new Uint8Array(n);let i=0;b.forEach(x=>{o.set(x,i);i+=x.length;});return o;};
 
+let JOB=null;
+async function runJob(){const J=JOB;$('stopb').classList.remove('hide');$('after').classList.remove('hide');$('resume').classList.add('hide');let err=null;
+ const t0=Date.now();
+ for(;J.i<J.cs.length;J.i++){if(STOP)break;const done=J.i,left=J.cs.length-done;
+  st(`⏳ आवाज़ बन रही है... (${done+1}/${J.cs.length}) · लगभग ${Math.round(J.bufs.reduce((a,b)=>a+b.length,0)/48000/60)} मिनट बना`);prog(done/J.cs.length*100);
+  try{J.bufs.push(await gemini(J.pre+J.cs[J.i],J.speech));}catch(e){err=e;break;}}
+ let pcm=join(J.bufs);if($('desil').checked&&pcm.length)pcm=desilencePCM(pcm);LAST={pcm,mp3:null};
+ if(pcm.length)$('player').src=URL.createObjectURL(wavBlob(pcm));
+ const mins=(pcm.length/48000/60).toFixed(1);
+ if(err||STOP){if(J.i<J.cs.length){$('resume').classList.remove('hide');}
+  st((err?'⚠️ '+err.message+' — ':'⏹ रोका गया — ')+`अब तक ${mins} मिनट बना (${J.i}/${J.cs.length} हिस्से)। इसे डाउनलोड कर लें, या बाद में "▶️ आगे जारी रखें" दबाएँ।`);}
+ else st(`✅ तैयार! कुल ${mins} मिनट`);}
+async function resumeJob(){if(!JOB)return;STOP=false;$('go').disabled=true;try{await runJob();$('player').classList.remove('hide');}catch(e){st('❌ '+e.message);}prog(null);$('go').disabled=false;}
 async function generate(){
  const text=$('txt').value.trim();if(!text)return st('⚠️ पहले text लिखें');
  if($('key').value.trim())localStorage.setItem('tts_key',$('key').value.trim());
@@ -228,11 +247,8 @@ async function generate(){
     speech={multiSpeakerVoiceConfig:{speakerVoiceConfigs:[{speaker:n1,voiceConfig:{prebuiltVoiceConfig:{voiceName:$('v1').value}}},{speaker:n2,voiceConfig:{prebuiltVoiceConfig:{voiceName:$('v2').value}}}]}};
     cs=chunks(text,1000);}
    else{speech={voiceConfig:{prebuiltVoiceConfig:{voiceName:$('voice').value}}};cs=chunks(text,1200);}
-   const pre=instr(),bufs=[];$('stopb').classList.remove('hide');$('after').classList.remove('hide');
-   for(let i=0;i<cs.length;i++){if(STOP)break;st(`⏳ आवाज़ बन रही है... (${i+1}/${cs.length})`);prog(i/cs.length*100);bufs.push(await gemini(pre+cs[i],speech));}
-   let pcm=join(bufs);if($('desil').checked)pcm=desilencePCM(pcm);LAST={pcm,mp3:null};
-   $('player').src=URL.createObjectURL(wavBlob(pcm));
-   st(`✅ तैयार! (${Math.round(pcm.length/48000)} सेकंड)${STOP?' — बीच में रोका':''}`);}
+   JOB={cs,speech,pre:instr(),bufs:[],i:0,text};
+   await runJob();}
   $('player').classList.remove('hide');$('after').classList.remove('hide');$('stopb').classList.add('hide');$('player').play();
   addHist(text);
  }catch(e){st('❌ '+e.message);}
