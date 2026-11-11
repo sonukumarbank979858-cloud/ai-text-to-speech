@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sanatan Voice — AI Text to Speech</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,"Noto Sans Devanagari",sans-serif;background:#f6f5f2;color:#151515;padding:18px}
+.wrap{max-width:760px;margin:auto}
+h1{font-size:30px;text-align:center;margin:16px 0 6px}
+.sub{text-align:center;color:#666;margin-bottom:20px}
+.card{background:#fff;border:1px solid #e3e1dc;border-radius:16px;padding:18px;margin-bottom:16px}
+label{display:block;font-weight:600;font-size:14px;margin:12px 0 6px}
+textarea,input,select{width:100%;padding:12px;border:1px solid #d6d3cc;border-radius:10px;font-size:16px;font-family:inherit;background:#fff}
+textarea{min-height:200px;resize:vertical}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row>div{flex:1;min-width:150px}
+.btn{width:100%;margin-top:16px;padding:15px;border:0;border-radius:12px;background:#151515;color:#fff;font-size:17px;font-weight:600;cursor:pointer}
+.btn:disabled{opacity:.5}
+.btn2{background:#fff;color:#151515;border:1px solid #151515;margin-top:10px}
+.meta{font-size:13px;color:#777;margin-top:6px;display:flex;justify-content:space-between}
+#status{margin-top:12px;font-size:14px;color:#444;min-height:18px}
+audio{width:100%;margin-top:14px}
+a{color:#0b57d0}
+.small{font-size:13px;color:#666;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>🎙️ AI Text to Speech</h1>
+<p class="sub">Google Gemini की इंसानी आवाज़ में हिंदी / English — MP3 जैसा WAV डाउनलोड करें</p>
+
+<div class="card">
+<label>Text लिखें</label>
+<textarea id="txt" placeholder="यहाँ अपना text लिखें या paste करें..."></textarea>
+<div class="meta"><span id="cnt">0 अक्षर</span><span>लंबा text अपने-आप हिस्सों में बनेगा</span></div>
+
+<div class="row">
+<div><label>आवाज़ (Voice)</label><select id="voice"></select></div>
+<div><label>Model</label><select id="model">
+<option value="gemini-2.5-flash-preview-tts">Gemini 2.5 Flash TTS (तेज़)</option>
+<option value="gemini-2.5-pro-preview-tts">Gemini 2.5 Pro TTS (बेहतर क्वालिटी)</option>
+</select></div>
+</div>
+
+<label>बोलने का अंदाज़ (Style) — वैकल्पिक</label>
+<input id="style" placeholder="जैसे: शांत, भावुक कथावाचक की तरह धीरे-धीरे पढ़ें">
+<div class="row" style="margin-top:4px">
+<button class="btn btn2" type="button" onclick="setStyle('शांत और भावुक कथावाचक की तरह, धीरे-धीरे और साफ़ उच्चारण में पढ़ें')">🕉️ कथा</button>
+<button class="btn btn2" type="button" onclick="setStyle('एक अच्छे शिक्षक की तरह साफ़, स्पष्ट और समझाते हुए पढ़ें')">📚 पढ़ाई</button>
+<button class="btn btn2" type="button" onclick="setStyle('ऊर्जा और उत्साह के साथ, YouTube वीडियो की तरह बोलें')">🔥 जोश</button>
+</div>
+
+<button class="btn" id="go" onclick="generate()">🔊 आवाज़ बनाएँ</button>
+<div id="status"></div>
+<audio id="player" controls style="display:none"></audio>
+<button class="btn btn2" id="dl" style="display:none" onclick="download()">⬇️ Audio डाउनलोड करें</button>
+</div>
+
+<div class="card">
+<label>Google AI Studio API Key</label>
+<input id="key" type="password" placeholder="AIza... (सिर्फ़ आपके फ़ोन/ब्राउज़र में सेव रहेगी)">
+<p class="small">Key किसी सर्वर पर नहीं जाती — सिर्फ़ इसी ब्राउज़र में सेव होती है। Key यहाँ से लें: <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a></p>
+</div>
+</div>
+
+<script>
+const VOICES=[["Kore","महिला · दृढ़"],["Aoede","महिला · सहज"],["Leda","महिला · युवा"],["Zephyr","महिला · चमकदार"],["Callirrhoe","महिला · आरामदेह"],["Autonoe","महिला · उज्ज्वल"],["Despina","महिला · मधुर"],["Erinome","महिला · साफ़"],["Laomedeia","महिला · उत्साही"],["Achernar","महिला · कोमल"],["Gacrux","महिला · परिपक्व"],["Pulcherrima","महिला · आगे बढ़ती"],["Vindemiatrix","महिला · सौम्य"],["Sulafat","महिला · गर्मजोशी"],["Charon","पुरुष · जानकारीपूर्ण"],["Puck","पुरुष · ज़िंदादिल"],["Fenrir","पुरुष · जोशीला"],["Orus","पुरुष · दृढ़"],["Enceladus","पुरुष · साँस भरी"],["Iapetus","पुरुष · साफ़"],["Umbriel","पुरुष · सहज"],["Algieba","पुरुष · मुलायम"],["Algenib","पुरुष · भारी"],["Rasalgethi","पुरुष · जानकारीपूर्ण"],["Alnilam","पुरुष · मज़बूत"],["Schedar","पुरुष · संतुलित"],["Achird","पुरुष · दोस्ताना"],["Zubenelgenubi","पुरुष · कैज़ुअल"],["Sadachbia","पुरुष · जीवंत"],["Sadaltager","पुरुष · ज्ञानी"]];
+const $=id=>document.getElementById(id);
+VOICES.forEach(([v,d])=>{const o=document.createElement('option');o.value=v;o.textContent=v+' — '+d;$('voice').appendChild(o);});
+['key','voice','model','style'].forEach(k=>{const s=localStorage.getItem('tts_'+k);if(s)$(k).value=s;$(k).addEventListener('change',()=>localStorage.setItem('tts_'+k,$(k).value));});
+$('txt').addEventListener('input',()=>$('cnt').textContent=$('txt').value.length+' अक्षर');
+function setStyle(s){$('style').value=s;localStorage.setItem('tts_style',s);}
+let blobUrl=null;
+
+function chunks(t,max=1200){const parts=t.replace(/\r/g,'').split(/(?<=[।!?.\n])\s*/);const out=[];let cur='';
+ for(const p of parts){if((cur+' '+p).length>max&&cur){out.push(cur.trim());cur=p;}else cur+=(cur?' ':'')+p;}
+ if(cur.trim())out.push(cur.trim());
+ return out.flatMap(c=>c.length<=max?[c]:c.match(new RegExp('.{1,'+max+'}','gs')));}
+
+async function tts(text,key,voice,model,style){
+ const prompt=style?`${style}:\n${text}`:text;
+ const body={contents:[{parts:[{text:prompt}]}],generationConfig:{responseModalities:["AUDIO"],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}}}};
+ for(let a=0;a<3;a++){
+  const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)});
+  const j=await r.json();
+  if(r.ok){const d=j?.candidates?.[0]?.content?.parts?.find(p=>p.inlineData)?.inlineData?.data;if(d)return Uint8Array.from(atob(d),c=>c.charCodeAt(0));}
+  if(r.status===429||r.status>=500){await new Promise(s=>setTimeout(s,(a+1)*8000));continue;}
+  throw new Error(j?.error?.message||('Error '+r.status));
+ }
+ throw new Error('बहुत ज़्यादा requests — थोड़ी देर बाद फिर कोशिश करें');}
+
+function wav(pcm,rate=24000){const h=new ArrayBuffer(44),v=new DataView(h);const w=(o,s)=>[...s].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));
+ w(0,'RIFF');v.setUint32(4,36+pcm.length,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+ v.setUint32(24,rate,true);v.setUint32(28,rate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,pcm.length,true);
+ return new Blob([h,pcm],{type:'audio/wav'});}
+
+async function generate(){
+ const text=$('txt').value.trim(),key=$('key').value.trim();
+ if(!text)return $('status').textContent='⚠️ पहले text लिखें';
+ if(!key)return $('status').textContent='⚠️ नीचे API Key डालें';
+ localStorage.setItem('tts_key',key);
+ $('go').disabled=true;$('dl').style.display='none';
+ try{const cs=chunks(text),bufs=[];
+  for(let i=0;i<cs.length;i++){$('status').textContent=`⏳ आवाज़ बन रही है... (${i+1}/${cs.length})`;bufs.push(await tts(cs[i],key,$('voice').value,$('model').value,$('style').value.trim()));}
+  const len=bufs.reduce((a,b)=>a+b.length,0),all=new Uint8Array(len);let o=0;bufs.forEach(b=>{all.set(b,o);o+=b.length;});
+  if(blobUrl)URL.revokeObjectURL(blobUrl);blobUrl=URL.createObjectURL(wav(all));
+  $('player').src=blobUrl;$('player').style.display='block';$('dl').style.display='block';$('player').play();
+  $('status').textContent=`✅ तैयार! (${Math.round(len/48000)} सेकंड)`;
+ }catch(e){$('status').textContent='❌ '+e.message;}
+ $('go').disabled=false;}
+
+function download(){const a=document.createElement('a');a.href=blobUrl;a.download='voice_'+$('voice').value+'_'+Date.now()+'.wav';a.click();}
+</script>
+</body>
+</html>
