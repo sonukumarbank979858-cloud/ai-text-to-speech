@@ -48,7 +48,15 @@ input[type=range]{padding:0}
 <label>Text लिखें</label>
 <textarea id="txt" placeholder="यहाँ अपना text लिखें या paste करें... (कोई limit नहीं)"></textarea>
 <div class="meta"><span id="cnt">0 अक्षर · 0 शब्द</span><span id="est"></span></div>
-<div class="row" style="margin-top:6px"><div><input type="file" id="file" accept=".txt" onchange="loadFile(this)"></div></div>
+<div class="card" style="background:#f3f7ff;border-color:#c9d8f5;margin:10px 0 0;padding:12px">
+<b>📄 PDF / फ़ाइल / Drive link से audio</b>
+<label>PDF या .txt फ़ाइल upload करें</label>
+<input type="file" id="file" accept=".pdf,.txt,application/pdf,text/plain" onchange="loadFile(this)">
+<label>या Google Drive link डालें (फ़ाइल "Anyone with the link" पर हो)</label>
+<div class="half"><input id="dlink" placeholder="https://drive.google.com/file/d/.../view" style="flex:3"><button class="btn btn2" style="flex:1;margin-top:0" onclick="loadDrive()">लाएँ</button></div>
+<label style="font-weight:400"><input type="checkbox" id="autogo" style="width:auto"> text आते ही अपने-आप audio बनाना शुरू करें</label>
+<p class="small" id="fst"></p>
+</div>
 
 <div id="single">
 <div class="row">
@@ -149,7 +157,32 @@ function setStyle(s){$('style').value=s;localStorage.setItem('tts_style',s);}
 function mode(m){MODE=m;$('t1').classList.toggle('on',m==1);$('t2').classList.toggle('on',m==2);$('single').classList.toggle('hide',m!=1);$('multi').classList.toggle('hide',m!=2);}
 function voiceChg(){$('clonebox').classList.toggle('hide',$('voice').value!=='__mine');
  const id=localStorage.getItem('tts_clone_id');$('clonest').textContent=id?'✅ आपकी क्लोन आवाज़ तैयार है। नया नमूना देकर दोबारा बना सकते हैं।':'';}
-function loadFile(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$('txt').value=r.result;cnt();};r.readAsText(f);}
+const fst=m=>$('fst').textContent=m;
+function b64(buf){const u=new Uint8Array(buf);let s='';for(let i=0;i<u.length;i+=32768)s+=String.fromCharCode.apply(null,u.subarray(i,i+32768));return btoa(s);}
+function putText(t){$('txt').value=t.trim();cnt();localStorage.setItem('tts_draft',$('txt').value);fst('✅ text आ गया ('+t.length+' अक्षर)। अब "आवाज़ बनाएँ" दबाएँ।');if($('autogo').checked)generate();}
+async function pdfToText(buf){if(!key())throw new Error('API Key नहीं मिली');
+ if(buf.byteLength>19e6)throw new Error('PDF 19 MB से बड़ी है — छोटी PDF डालें');
+ fst('⏳ PDF से text निकाल रहा है (हिंदी/स्कैन PDF भी चलेगी)...');
+ const body={contents:[{parts:[{inline_data:{mime_type:'application/pdf',data:b64(buf)}},{text:'इस PDF का पूरा text ठीक वैसा ही, पढ़ने के क्रम में, उसी भाषा में लिखो। page number, header-footer, कोई टिप्पणी या markdown मत जोड़ो। तालिका हो तो वाक्यों में लिखो।'}]}],generationConfig:{temperature:0,maxOutputTokens:65000}};
+ for(let a=0;a<3;a++){const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key()},body:JSON.stringify(body)});
+  const j=await r.json().catch(()=>({}));if(r.ok){const t=(j?.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('');if(t.trim())return t;}
+  if(r.status===429||r.status>=500||r.ok){fst('⏳ Google व्यस्त है, दोबारा कोशिश...');await new Promise(z=>setTimeout(z,(a+1)*8000));continue;}
+  throw new Error(j?.error?.message||('Error '+r.status));}
+ throw new Error('PDF नहीं पढ़ी जा सकी');}
+async function loadFile(inp){const f=inp.files[0];if(!f)return;
+ try{const buf=await f.arrayBuffer();
+  if(/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name))putText(await pdfToText(buf));
+  else putText(new TextDecoder().decode(buf));}catch(e){fst('❌ '+e.message);}inp.value='';}
+async function loadDrive(){const u=$('dlink').value.trim();const m=u.match(/\/d\/([\w-]{20,})/)||u.match(/[?&]id=([\w-]{20,})/);
+ if(!m)return fst('⚠️ सही Drive link डालें');const id=m[1];
+ try{fst('⏳ Drive से फ़ाइल ला रहा है...');
+  if(/docs\.google\.com\/document/.test(u)){const r=await fetch(`https://www.googleapis.com/drive/v3/files/${id}/export?mimeType=text/plain&key=${key()}`);if(!r.ok)throw new Error('Doc नहीं खुला — sharing "Anyone with the link" करें');return putText(await r.text());}
+  const r=await fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media&key=${key()}`);
+  if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error((j?.error?.message||('Drive error '+r.status))+' — फ़ाइल को "Anyone with the link" पर share करें, या फ़ाइल download करके upload करें');}
+  const ct=r.headers.get('content-type')||'',buf=await r.arrayBuffer();
+  if(/pdf/.test(ct)||new TextDecoder().decode(buf.slice(0,5))==='%PDF-')putText(await pdfToText(buf));
+  else putText(new TextDecoder().decode(buf));
+ }catch(e){fst('❌ '+e.message);}}
 const key=()=>($('key').value.trim()||window.DEFAULT_KEY||'');
 const st=(m)=>$('status').textContent=m;
 function prog(p){$('bar').style.display=p==null?'none':'block';$('barf').style.width=(p||0)+'%';}
