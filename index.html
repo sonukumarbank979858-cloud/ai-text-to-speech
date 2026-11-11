@@ -254,14 +254,14 @@ function desilencePCM(pcm){const s=new Int16Array(pcm.buffer,pcm.byteOffset,pcm.
  const o=new Int16Array(c.length);for(let i=0;i<c.length;i++)o[i]=Math.max(-32768,Math.min(32767,c[i]*32768));return new Uint8Array(o.buffer);}
 /* ---- Merge audio ---- */
 let MFILES=[],MOUT=null;
-function addMerge(inp){MFILES=MFILES.concat([...inp.files]);inp.value='';drawMerge();}
+async function addMerge(inp){const fs=[...inp.files];$('mst').textContent='⏳ फ़ाइलें ले रहा है...';for(const f of fs){try{MFILES.push({name:f.name,buf:await f.arrayBuffer()});}catch(e){$('mst').textContent='❌ '+f.name+' नहीं पढ़ी जा सकी';}}inp.value='';$('mst').textContent='';drawMerge();}
 function drawMerge(){$('mlist').innerHTML='';MFILES.forEach((f,i)=>{const d=document.createElement('div');d.style.cssText='display:flex;align-items:center;gap:6px;padding:7px 0;border-bottom:1px solid #eee;font-size:14px';
  d.innerHTML=`<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i+1}. ${f.name.replace(/</g,'&lt;')}</span><button class="chip" onclick="mv(${i},-1)">⬆</button><button class="chip" onclick="mv(${i},1)">⬇</button><button class="chip" onclick="MFILES.splice(${i},1);drawMerge()">✖</button>`;$('mlist').appendChild(d);});}
 function mv(i,d){const j=i+d;if(j<0||j>=MFILES.length)return;[MFILES[i],MFILES[j]]=[MFILES[j],MFILES[i]];drawMerge();}
 async function mergeAudio(){if(MFILES.length<2)return $('mst').textContent='⚠️ कम से कम 2 फ़ाइलें चुनें';
  try{const R=44100,ac=new (window.AudioContext||window.webkitAudioContext)(),gap=new Float32Array(Math.round(R*+$('mgap').value)),parts=[];
   for(let i=0;i<MFILES.length;i++){$('mst').textContent=`⏳ फ़ाइल ${i+1}/${MFILES.length} पढ़ रहा है...`;
-   const buf=await ac.decodeAudioData(await MFILES[i].arrayBuffer());
+   const buf=await ac.decodeAudioData(MFILES[i].buf.slice(0));
    const oc=new OfflineAudioContext(1,Math.ceil(buf.duration*R),R);const src=oc.createBufferSource();src.buffer=buf;src.connect(oc.destination);src.start();
    const r=await oc.startRendering();if(i)parts.push(gap);parts.push(r.getChannelData(0));}
   const tot=parts.reduce((a,p)=>a+p.length,0),s16=new Int16Array(tot);let o=0;
