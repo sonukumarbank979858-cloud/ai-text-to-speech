@@ -111,15 +111,15 @@ input[type=range]{padding:0}
 <div class="half hide" id="after"><button class="btn btn2" onclick="download()">⬇️ डाउनलोड</button><button class="btn btn2 hide" id="stopb" onclick="STOP=true">⏹ रोकें</button></div>
 </div>
 
-<div class="card"><b>🔇 Silence Remover — किसी भी ऑडियो से खामोशी हटाएँ</b>
-<p class="small">अपनी कोई भी audio/video फ़ाइल डालें (MP3, WAV, M4A...)। लंबी चुप्पी कट जाएगी, आवाज़ वही रहेगी।</p>
-<input type="file" id="sfile" accept="audio/*,video/*" style="margin-top:8px">
-<div class="row"><div><label>कितनी लंबी चुप्पी कटे: <span id="minv">0.4</span> सेकंड से ज़्यादा</label><input type="range" id="smin" min="0.2" max="2" step="0.1" value="0.4" oninput="$('minv').textContent=this.value"></div>
-<div><label>चुप्पी का स्तर: <span id="thv">-40</span> dB</label><input type="range" id="sth" min="-60" max="-20" step="1" value="-40" oninput="$('thv').textContent=this.value"></div></div>
-<button class="btn" onclick="silenceTool()">✂️ Silence हटाएँ</button>
-<p class="small" id="sst"></p>
-<audio id="splay" controls class="hide"></audio>
-<button class="btn btn2 hide" id="sdl" onclick="sDownload()">⬇️ MP3 डाउनलोड</button>
+<div class="card"><b>🔗 Merge Audio — कई ऑडियो जोड़कर एक बनाएँ</b>
+<p class="small">2 या ज़्यादा audio/video फ़ाइलें चुनें (MP3, WAV, M4A...)। ऊपर-नीचे करके क्रम बदलें, फिर एक MP3 में जोड़ें।</p>
+<input type="file" id="mfiles" accept="audio/*,video/*" multiple onchange="addMerge(this)" style="margin-top:8px">
+<div id="mlist" style="margin-top:8px"></div>
+<div class="row"><div><label>हर ऑडियो के बीच gap: <span id="gapv">0.5</span> सेकंड</label><input type="range" id="mgap" min="0" max="5" step="0.5" value="0.5" oninput="$('gapv').textContent=this.value"></div></div>
+<button class="btn" onclick="mergeAudio()">🔗 ऑडियो जोड़ें</button>
+<p class="small" id="mst"></p>
+<audio id="mplay" controls class="hide"></audio>
+<button class="btn btn2 hide" id="mdl" onclick="mDownload()">⬇️ MP3 डाउनलोड</button>
 </div>
 
 <div class="card"><b>🕘 हाल का इतिहास</b><div class="hist" id="hist"></div></div>
@@ -252,21 +252,27 @@ function cutSilence(f,rate,thDb,minSec,keepSec){ // f: Float32Array mono
 function desilencePCM(pcm){const s=new Int16Array(pcm.buffer,pcm.byteOffset,pcm.length>>1);const f=new Float32Array(s.length);
  for(let i=0;i<s.length;i++)f[i]=s[i]/32768;const c=cutSilence(f,24000,-42,0.5,0.3);
  const o=new Int16Array(c.length);for(let i=0;i<c.length;i++)o[i]=Math.max(-32768,Math.min(32767,c[i]*32768));return new Uint8Array(o.buffer);}
-let SOUT=null;
-async function silenceTool(){const file=$('sfile').files[0];if(!file)return $('sst').textContent='⚠️ पहले फ़ाइल चुनें';
- try{$('sst').textContent='⏳ फ़ाइल पढ़ रहा है...';const ac=new (window.AudioContext||window.webkitAudioContext)();
-  const buf=await ac.decodeAudioData(await file.arrayBuffer());const rate=buf.sampleRate,L=buf.length;const f=new Float32Array(L);
-  for(let c=0;c<buf.numberOfChannels;c++){const d=buf.getChannelData(c);for(let i=0;i<L;i++)f[i]+=d[i]/buf.numberOfChannels;}
-  $('sst').textContent='⏳ खामोशी हटा रहा है...';await new Promise(r=>setTimeout(r,30));
-  const c=cutSilence(f,rate,+$('sth').value,+$('smin').value,0.25);
-  const s16=new Int16Array(c.length);for(let i=0;i<c.length;i++)s16[i]=Math.max(-32768,Math.min(32767,c[i]*32768));
-  $('sst').textContent='⏳ MP3 बना रहा है...';await new Promise(r=>setTimeout(r,30));
-  const e=new lamejs.Mp3Encoder(1,rate,128),out=[];for(let i=0;i<s16.length;i+=1152){const b=e.encodeBuffer(s16.subarray(i,i+1152));if(b.length)out.push(new Uint8Array(b));}
-  const fl=e.flush();if(fl.length)out.push(new Uint8Array(fl));SOUT=new Blob(out,{type:'audio/mpeg'});
-  $('splay').src=URL.createObjectURL(SOUT);$('splay').classList.remove('hide');$('sdl').classList.remove('hide');
-  $('sst').textContent=`✅ ${(L/rate).toFixed(1)} सेकंड → ${(c.length/rate).toFixed(1)} सेकंड (${((L-c.length)/rate).toFixed(1)} सेकंड खामोशी हटी)`;
- }catch(err){$('sst').textContent='❌ यह फ़ाइल नहीं पढ़ी जा सकी: '+err.message;}}
-function sDownload(){if(!SOUT)return;const a=document.createElement('a');a.href=URL.createObjectURL(SOUT);a.download='no_silence_'+Date.now()+'.mp3';a.click();}
+/* ---- Merge audio ---- */
+let MFILES=[],MOUT=null;
+function addMerge(inp){MFILES=MFILES.concat([...inp.files]);inp.value='';drawMerge();}
+function drawMerge(){$('mlist').innerHTML='';MFILES.forEach((f,i)=>{const d=document.createElement('div');d.style.cssText='display:flex;align-items:center;gap:6px;padding:7px 0;border-bottom:1px solid #eee;font-size:14px';
+ d.innerHTML=`<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i+1}. ${f.name.replace(/</g,'&lt;')}</span><button class="chip" onclick="mv(${i},-1)">⬆</button><button class="chip" onclick="mv(${i},1)">⬇</button><button class="chip" onclick="MFILES.splice(${i},1);drawMerge()">✖</button>`;$('mlist').appendChild(d);});}
+function mv(i,d){const j=i+d;if(j<0||j>=MFILES.length)return;[MFILES[i],MFILES[j]]=[MFILES[j],MFILES[i]];drawMerge();}
+async function mergeAudio(){if(MFILES.length<2)return $('mst').textContent='⚠️ कम से कम 2 फ़ाइलें चुनें';
+ try{const R=44100,ac=new (window.AudioContext||window.webkitAudioContext)(),gap=new Float32Array(Math.round(R*+$('mgap').value)),parts=[];
+  for(let i=0;i<MFILES.length;i++){$('mst').textContent=`⏳ फ़ाइल ${i+1}/${MFILES.length} पढ़ रहा है...`;
+   const buf=await ac.decodeAudioData(await MFILES[i].arrayBuffer());
+   const oc=new OfflineAudioContext(1,Math.ceil(buf.duration*R),R);const src=oc.createBufferSource();src.buffer=buf;src.connect(oc.destination);src.start();
+   const r=await oc.startRendering();if(i)parts.push(gap);parts.push(r.getChannelData(0));}
+  const tot=parts.reduce((a,p)=>a+p.length,0),s16=new Int16Array(tot);let o=0;
+  parts.forEach(p=>{for(let i=0;i<p.length;i++)s16[o++]=Math.max(-32768,Math.min(32767,p[i]*32768));});
+  $('mst').textContent='⏳ MP3 बना रहा है...';await new Promise(r=>setTimeout(r,30));
+  const e=new lamejs.Mp3Encoder(1,R,128),out=[];for(let i=0;i<s16.length;i+=1152){const b=e.encodeBuffer(s16.subarray(i,i+1152));if(b.length)out.push(new Uint8Array(b));}
+  const fl=e.flush();if(fl.length)out.push(new Uint8Array(fl));MOUT=new Blob(out,{type:'audio/mpeg'});
+  $('mplay').src=URL.createObjectURL(MOUT);$('mplay').classList.remove('hide');$('mdl').classList.remove('hide');
+  $('mst').textContent=`✅ ${MFILES.length} ऑडियो जुड़ गए — कुल ${(tot/R/60).toFixed(1)} मिनट`;
+ }catch(err){$('mst').textContent='❌ कोई फ़ाइल नहीं पढ़ी जा सकी: '+err.message;}}
+function mDownload(){if(!MOUT)return;const a=document.createElement('a');a.href=URL.createObjectURL(MOUT);a.download='merged_'+Date.now()+'.mp3';a.click();}
 
 /* ---- History ---- */
 function addHist(t){let h=JSON.parse(localStorage.getItem('tts_hist')||'[]');h=h.filter(x=>x!==t);h.unshift(t);localStorage.setItem('tts_hist',JSON.stringify(h.slice(0,15)));showHist();}
