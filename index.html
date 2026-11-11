@@ -3,114 +3,275 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Sanatan Voice — AI Text to Speech</title>
+<title>AI Text to Speech — इंसानी आवाज़</title>
+<script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
+<script src="config.js" onerror="window.DEFAULT_KEY=''"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,-apple-system,"Noto Sans Devanagari",sans-serif;background:#f6f5f2;color:#151515;padding:18px}
-.wrap{max-width:760px;margin:auto}
-h1{font-size:30px;text-align:center;margin:16px 0 6px}
-.sub{text-align:center;color:#666;margin-bottom:20px}
-.card{background:#fff;border:1px solid #e3e1dc;border-radius:16px;padding:18px;margin-bottom:16px}
+body{font-family:system-ui,-apple-system,"Noto Sans Devanagari",sans-serif;background:#f6f5f2;color:#151515;padding:16px}
+.wrap{max-width:780px;margin:auto}
+h1{font-size:28px;text-align:center;margin:14px 0 6px}
+.sub{text-align:center;color:#666;margin-bottom:18px;font-size:15px}
+.card{background:#fff;border:1px solid #e3e1dc;border-radius:16px;padding:16px;margin-bottom:14px}
+.tabs{display:flex;gap:6px;margin-bottom:12px}
+.tab{flex:1;padding:10px;border:1px solid #d6d3cc;border-radius:10px;background:#fff;font-size:14px;font-weight:600;cursor:pointer}
+.tab.on{background:#151515;color:#fff;border-color:#151515}
 label{display:block;font-weight:600;font-size:14px;margin:12px 0 6px}
-textarea,input,select{width:100%;padding:12px;border:1px solid #d6d3cc;border-radius:10px;font-size:16px;font-family:inherit;background:#fff}
-textarea{min-height:200px;resize:vertical}
-.row{display:flex;gap:10px;flex-wrap:wrap}.row>div{flex:1;min-width:150px}
-.btn{width:100%;margin-top:16px;padding:15px;border:0;border-radius:12px;background:#151515;color:#fff;font-size:17px;font-weight:600;cursor:pointer}
+textarea,input,select{width:100%;padding:11px;border:1px solid #d6d3cc;border-radius:10px;font-size:16px;font-family:inherit;background:#fff}
+textarea{min-height:220px;resize:vertical}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row>div{flex:1;min-width:140px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.chip{padding:7px 11px;border:1px solid #d6d3cc;border-radius:20px;background:#fafafa;font-size:13px;cursor:pointer}
+.btn{width:100%;margin-top:14px;padding:14px;border:0;border-radius:12px;background:#151515;color:#fff;font-size:17px;font-weight:600;cursor:pointer}
 .btn:disabled{opacity:.5}
-.btn2{background:#fff;color:#151515;border:1px solid #151515;margin-top:10px}
-.meta{font-size:13px;color:#777;margin-top:6px;display:flex;justify-content:space-between}
+.btn2{background:#fff;color:#151515;border:1px solid #151515;font-size:15px;padding:11px}
+.half{display:flex;gap:8px}.half .btn{flex:1}
+.meta{font-size:13px;color:#777;margin-top:6px;display:flex;justify-content:space-between;gap:8px}
 #status{margin-top:12px;font-size:14px;color:#444;min-height:18px}
-audio{width:100%;margin-top:14px}
-a{color:#0b57d0}
-.small{font-size:13px;color:#666;margin-top:6px}
+.bar{height:6px;background:#eee;border-radius:4px;margin-top:8px;overflow:hidden;display:none}.bar i{display:block;height:100%;width:0;background:#151515;transition:width .3s}
+audio{width:100%;margin-top:12px}
+a{color:#0b57d0}.small{font-size:13px;color:#666;margin-top:6px;line-height:1.5}
+.hide{display:none}
+.hist div{padding:9px 0;border-bottom:1px solid #eee;font-size:14px;cursor:pointer}
+.clone{background:#fff8ec;border:1px dashed #e0a84a;border-radius:12px;padding:12px;margin-top:10px}
+input[type=range]{padding:0}
 </style>
 </head>
 <body>
 <div class="wrap">
 <h1>🎙️ AI Text to Speech</h1>
-<p class="sub">Google Gemini की इंसानी आवाज़ में हिंदी / English — MP3 जैसा WAV डाउनलोड करें</p>
+<p class="sub">Google Gemini की 30 इंसानी आवाज़ें + 31वीं आपकी अपनी आवाज़ · अनगिनत text · MP3 डाउनलोड</p>
 
 <div class="card">
+<div class="tabs"><button class="tab on" id="t1" onclick="mode(1)">🗣️ एक आवाज़</button><button class="tab" id="t2" onclick="mode(2)">👥 दो आवाज़ें (संवाद)</button></div>
+
 <label>Text लिखें</label>
-<textarea id="txt" placeholder="यहाँ अपना text लिखें या paste करें..."></textarea>
-<div class="meta"><span id="cnt">0 अक्षर</span><span>लंबा text अपने-आप हिस्सों में बनेगा</span></div>
+<textarea id="txt" placeholder="यहाँ अपना text लिखें या paste करें... (कोई limit नहीं)"></textarea>
+<div class="meta"><span id="cnt">0 अक्षर · 0 शब्द</span><span id="est"></span></div>
+<div class="row" style="margin-top:6px"><div><input type="file" id="file" accept=".txt" onchange="loadFile(this)"></div></div>
+
+<div id="single">
+<div class="row">
+<div><label>आवाज़ (Voice)</label><select id="voice" onchange="voiceChg()"></select></div>
+<div><label>भाषा</label><select id="lang">
+<option value="">अपने-आप</option><option>हिंदी</option><option>English</option><option>Hinglish</option><option>भोजपुरी</option><option>मैथिली</option><option>पंजाबी</option><option>उर्दू</option><option>संस्कृत</option><option>मराठी</option><option>बंगाली</option><option>गुजराती</option><option>तमिल</option><option>तेलुगु</option>
+</select></div>
+</div>
+<button class="btn btn2" style="margin-top:8px" onclick="preview()">▶️ इस आवाज़ का नमूना सुनें</button>
+
+<div class="clone hide" id="clonebox">
+<b>🎤 मेरी आवाज़ (Voice Clone)</b>
+<p class="small">Google Gemini आवाज़ क्लोन नहीं करता, इसलिए यह ElevenLabs से चलता है (उनका Starter या ऊपर का plan चाहिए)। 1–2 मिनट साफ़ आवाज़ रिकॉर्ड या upload करें, एक बार क्लोन बनेगा, फिर हमेशा इस्तेमाल होगा।</p>
+<label>ElevenLabs API Key</label><input id="elkey" type="password" placeholder="sk_... (सिर्फ़ इसी ब्राउज़र में सेव)">
+<label>आवाज़ का नमूना</label>
+<div class="half"><button class="btn btn2" id="rec" onclick="record()">⏺️ रिकॉर्ड करें</button><input type="file" id="sample" accept="audio/*" style="flex:1;margin-top:14px"></div>
+<audio id="recplay" controls class="hide"></audio>
+<button class="btn" onclick="makeClone()">🧬 मेरी आवाज़ क्लोन बनाएँ</button>
+<p class="small" id="clonest"></p>
+</div>
+</div>
+
+<div id="multi" class="hide">
+<p class="small">हर लाइन ऐसे लिखें — <b>राम: नमस्ते</b> / <b>सीता: प्रणाम</b></p>
+<div class="row">
+<div><label>बोलने वाला 1 — नाम</label><input id="sp1" value="राम"><select id="v1" style="margin-top:6px"></select></div>
+<div><label>बोलने वाला 2 — नाम</label><input id="sp2" value="सीता"><select id="v2" style="margin-top:6px"></select></div>
+</div>
+</div>
+
+<label>बोलने का अंदाज़ (Style)</label>
+<input id="style" placeholder="जैसे: शांत, भावुक कथावाचक की तरह">
+<div class="chips">
+<span class="chip" onclick="setStyle('शांत और भावुक कथावाचक की तरह, साफ़ उच्चारण में')">🕉️ कथा</span>
+<span class="chip" onclick="setStyle('एक अच्छे शिक्षक की तरह साफ़ और समझाते हुए')">📚 पढ़ाई</span>
+<span class="chip" onclick="setStyle('ऊर्जा और उत्साह के साथ, YouTube वीडियो की तरह')">🔥 जोश</span>
+<span class="chip" onclick="setStyle('समाचार एंकर की तरह गंभीर और स्पष्ट')">📰 न्यूज़</span>
+<span class="chip" onclick="setStyle('बच्चों को कहानी सुनाते हुए प्यार से')">🧒 कहानी</span>
+<span class="chip" onclick="setStyle('भक्ति भाव से, श्रद्धा के साथ')">🙏 भक्ति</span>
+<span class="chip" onclick="setStyle('दुखी और भावुक आवाज़ में')">😢 भावुक</span>
+<span class="chip" onclick="setStyle('फुसफुसाते हुए, धीरे से')">🤫 धीमे</span>
+<span class="chip" onclick="setStyle('')">✖ कोई नहीं</span>
+</div>
 
 <div class="row">
-<div><label>आवाज़ (Voice)</label><select id="voice"></select></div>
+<div><label>गति (Speed): <span id="spv">सामान्य</span></label><input type="range" id="speed" min="0" max="4" value="2" oninput="spLbl()"></div>
 <div><label>Model</label><select id="model">
-<option value="gemini-2.5-flash-preview-tts">Gemini 2.5 Flash TTS (तेज़)</option>
-<option value="gemini-2.5-pro-preview-tts">Gemini 2.5 Pro TTS (बेहतर क्वालिटी)</option>
+<option value="gemini-2.5-flash-preview-tts">Gemini Flash TTS (तेज़)</option>
+<option value="gemini-2.5-pro-preview-tts">Gemini Pro TTS (बेहतर)</option>
 </select></div>
 </div>
 
-<label>बोलने का अंदाज़ (Style) — वैकल्पिक</label>
-<input id="style" placeholder="जैसे: शांत, भावुक कथावाचक की तरह धीरे-धीरे पढ़ें">
-<div class="row" style="margin-top:4px">
-<button class="btn btn2" type="button" onclick="setStyle('शांत और भावुक कथावाचक की तरह, धीरे-धीरे और साफ़ उच्चारण में पढ़ें')">🕉️ कथा</button>
-<button class="btn btn2" type="button" onclick="setStyle('एक अच्छे शिक्षक की तरह साफ़, स्पष्ट और समझाते हुए पढ़ें')">📚 पढ़ाई</button>
-<button class="btn btn2" type="button" onclick="setStyle('ऊर्जा और उत्साह के साथ, YouTube वीडियो की तरह बोलें')">🔥 जोश</button>
-</div>
+<div class="row"><div><label><input type="checkbox" id="desil" checked style="width:auto"> 🔇 बीच की लंबी खामोशी (silence) हटाएँ</label></div></div>
+<div class="row"><div><label>Download format</label><select id="fmt"><option value="mp3">MP3</option><option value="wav">WAV (बेस्ट क्वालिटी)</option></select></div></div>
 
 <button class="btn" id="go" onclick="generate()">🔊 आवाज़ बनाएँ</button>
+<div class="bar" id="bar"><i id="barf"></i></div>
 <div id="status"></div>
-<audio id="player" controls style="display:none"></audio>
-<button class="btn btn2" id="dl" style="display:none" onclick="download()">⬇️ Audio डाउनलोड करें</button>
+<audio id="player" controls class="hide"></audio>
+<div class="half hide" id="after"><button class="btn btn2" onclick="download()">⬇️ डाउनलोड</button><button class="btn btn2 hide" id="stopb" onclick="STOP=true">⏹ रोकें</button></div>
 </div>
 
+<div class="card"><b>🔇 Silence Remover — किसी भी ऑडियो से खामोशी हटाएँ</b>
+<p class="small">अपनी कोई भी audio/video फ़ाइल डालें (MP3, WAV, M4A...)। लंबी चुप्पी कट जाएगी, आवाज़ वही रहेगी।</p>
+<input type="file" id="sfile" accept="audio/*,video/*" style="margin-top:8px">
+<div class="row"><div><label>कितनी लंबी चुप्पी कटे: <span id="minv">0.4</span> सेकंड से ज़्यादा</label><input type="range" id="smin" min="0.2" max="2" step="0.1" value="0.4" oninput="$('minv').textContent=this.value"></div>
+<div><label>चुप्पी का स्तर: <span id="thv">-40</span> dB</label><input type="range" id="sth" min="-60" max="-20" step="1" value="-40" oninput="$('thv').textContent=this.value"></div></div>
+<button class="btn" onclick="silenceTool()">✂️ Silence हटाएँ</button>
+<p class="small" id="sst"></p>
+<audio id="splay" controls class="hide"></audio>
+<button class="btn btn2 hide" id="sdl" onclick="sDownload()">⬇️ MP3 डाउनलोड</button>
+</div>
+
+<div class="card"><b>🕘 हाल का इतिहास</b><div class="hist" id="hist"></div></div>
+
 <div class="card">
-<label>Google AI Studio API Key</label>
-<input id="key" type="password" placeholder="AIza... (सिर्फ़ आपके फ़ोन/ब्राउज़र में सेव रहेगी)">
-<p class="small">Key किसी सर्वर पर नहीं जाती — सिर्फ़ इसी ब्राउज़र में सेव होती है। Key यहाँ से लें: <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a></p>
+<label>Google Gemini API Key</label>
+<input id="key" type="password" placeholder="पहले से लगी है — बदलनी हो तो यहाँ डालें">
+<p class="small">आपकी अपनी key डालें तो वही इस्तेमाल होगी (सिर्फ़ इस ब्राउज़र में सेव)।</p>
 </div>
 </div>
 
 <script>
 const VOICES=[["Kore","महिला · दृढ़"],["Aoede","महिला · सहज"],["Leda","महिला · युवा"],["Zephyr","महिला · चमकदार"],["Callirrhoe","महिला · आरामदेह"],["Autonoe","महिला · उज्ज्वल"],["Despina","महिला · मधुर"],["Erinome","महिला · साफ़"],["Laomedeia","महिला · उत्साही"],["Achernar","महिला · कोमल"],["Gacrux","महिला · परिपक्व"],["Pulcherrima","महिला · आगे बढ़ती"],["Vindemiatrix","महिला · सौम्य"],["Sulafat","महिला · गर्मजोशी"],["Charon","पुरुष · जानकारीपूर्ण"],["Puck","पुरुष · ज़िंदादिल"],["Fenrir","पुरुष · जोशीला"],["Orus","पुरुष · दृढ़"],["Enceladus","पुरुष · साँस भरी"],["Iapetus","पुरुष · साफ़"],["Umbriel","पुरुष · सहज"],["Algieba","पुरुष · मुलायम"],["Algenib","पुरुष · भारी"],["Rasalgethi","पुरुष · जानकारीपूर्ण"],["Alnilam","पुरुष · मज़बूत"],["Schedar","पुरुष · संतुलित"],["Achird","पुरुष · दोस्ताना"],["Zubenelgenubi","पुरुष · कैज़ुअल"],["Sadachbia","पुरुष · जीवंत"],["Sadaltager","पुरुष · ज्ञानी"]];
+const SPEEDS=['बहुत धीमे','धीमे','सामान्य','तेज़','बहुत तेज़'];
 const $=id=>document.getElementById(id);
-VOICES.forEach(([v,d])=>{const o=document.createElement('option');o.value=v;o.textContent=v+' — '+d;$('voice').appendChild(o);});
-['key','voice','model','style'].forEach(k=>{const s=localStorage.getItem('tts_'+k);if(s)$(k).value=s;$(k).addEventListener('change',()=>localStorage.setItem('tts_'+k,$(k).value));});
-$('txt').addEventListener('input',()=>$('cnt').textContent=$('txt').value.length+' अक्षर');
+let MODE=1,STOP=false,LAST=null,recBlob=null;
+function fill(sel,mine){VOICES.forEach(([v,d],i)=>{const o=document.createElement('option');o.value=v;o.textContent=(i+1)+'. '+v+' — '+d;$(sel).appendChild(o);});
+ if(mine){const o=document.createElement('option');o.value='__mine';o.textContent='31. 🎤 मेरी आवाज़ (Clone)';$(sel).appendChild(o);}}
+fill('voice',true);fill('v1');fill('v2');$('v2').value='Charon';
+['key','voice','model','style','lang','speed','fmt','elkey','v1','v2','sp1','sp2'].forEach(k=>{const s=localStorage.getItem('tts_'+k);if(s!==null)$(k).value=s;$(k).addEventListener('change',()=>localStorage.setItem('tts_'+k,$(k).value));});
+$('txt').value=localStorage.getItem('tts_draft')||'';
+$('txt').addEventListener('input',()=>{cnt();localStorage.setItem('tts_draft',$('txt').value);});
+function cnt(){const t=$('txt').value;const w=t.trim()?t.trim().split(/\s+/).length:0;$('cnt').textContent=t.length+' अक्षर · '+w+' शब्द';$('est').textContent=w?'लगभग '+Math.max(1,Math.round(w/130))+' मिनट ऑडियो':'';}
+cnt();spLbl();voiceChg();showHist();
+function spLbl(){$('spv').textContent=SPEEDS[$('speed').value];localStorage.setItem('tts_speed',$('speed').value);}
 function setStyle(s){$('style').value=s;localStorage.setItem('tts_style',s);}
-let blobUrl=null;
+function mode(m){MODE=m;$('t1').classList.toggle('on',m==1);$('t2').classList.toggle('on',m==2);$('single').classList.toggle('hide',m!=1);$('multi').classList.toggle('hide',m!=2);}
+function voiceChg(){$('clonebox').classList.toggle('hide',$('voice').value!=='__mine');
+ const id=localStorage.getItem('tts_clone_id');$('clonest').textContent=id?'✅ आपकी क्लोन आवाज़ तैयार है। नया नमूना देकर दोबारा बना सकते हैं।':'';}
+function loadFile(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$('txt').value=r.result;cnt();};r.readAsText(f);}
+const key=()=>($('key').value.trim()||window.DEFAULT_KEY||'');
+const st=(m)=>$('status').textContent=m;
+function prog(p){$('bar').style.display=p==null?'none':'block';$('barf').style.width=(p||0)+'%';}
 
-function chunks(t,max=1200){const parts=t.replace(/\r/g,'').split(/(?<=[।!?.\n])\s*/);const out=[];let cur='';
+function chunks(t,max){const parts=t.replace(/\r/g,'').split(/(?<=[।!?.\n])\s*/);const out=[];let cur='';
  for(const p of parts){if((cur+' '+p).length>max&&cur){out.push(cur.trim());cur=p;}else cur+=(cur?' ':'')+p;}
  if(cur.trim())out.push(cur.trim());
- return out.flatMap(c=>c.length<=max?[c]:c.match(new RegExp('.{1,'+max+'}','gs')));}
+ return out.flatMap(c=>c.length<=max?[c]:c.match(new RegExp('[\\s\\S]{1,'+max+'}','g')));}
 
-async function tts(text,key,voice,model,style){
- const prompt=style?`${style}:\n${text}`:text;
- const body={contents:[{parts:[{text:prompt}]}],generationConfig:{responseModalities:["AUDIO"],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}}}};
- for(let a=0;a<3;a++){
-  const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)});
-  const j=await r.json();
+function instr(){const a=[];const s=$('style').value.trim(),l=$('lang').value,sp=+$('speed').value;
+ if(s)a.push(s);if(l)a.push(l+' भाषा के सही उच्चारण में');if(sp!=2)a.push(SPEEDS[sp]+' गति से');
+ return a.length?('इस text को '+a.join(', ')+' पढ़ें (सिर्फ़ text पढ़ें, यह निर्देश नहीं):\n'):'';}
+
+async function gemini(text,speech){
+ const body={contents:[{parts:[{text}]}],generationConfig:{responseModalities:["AUDIO"],speechConfig:speech}};
+ for(let a=0;a<4;a++){
+  const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${$('model').value}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key()},body:JSON.stringify(body)});
+  const j=await r.json().catch(()=>({}));
   if(r.ok){const d=j?.candidates?.[0]?.content?.parts?.find(p=>p.inlineData)?.inlineData?.data;if(d)return Uint8Array.from(atob(d),c=>c.charCodeAt(0));}
-  if(r.status===429||r.status>=500){await new Promise(s=>setTimeout(s,(a+1)*8000));continue;}
-  throw new Error(j?.error?.message||('Error '+r.status));
- }
- throw new Error('बहुत ज़्यादा requests — थोड़ी देर बाद फिर कोशिश करें');}
+  if(r.status===429||r.status>=500||r.ok){st(`⏳ Google व्यस्त है, ${(a+1)*10} सेकंड में दोबारा...`);await new Promise(s=>setTimeout(s,(a+1)*10000));continue;}
+  throw new Error(j?.error?.message||('Error '+r.status));}
+ throw new Error('Limit पूरी — थोड़ी देर बाद फिर कोशिश करें');}
 
-function wav(pcm,rate=24000){const h=new ArrayBuffer(44),v=new DataView(h);const w=(o,s)=>[...s].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));
+function wavBlob(pcm,rate=24000){const h=new ArrayBuffer(44),v=new DataView(h);const w=(o,s)=>[...s].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));
  w(0,'RIFF');v.setUint32(4,36+pcm.length,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
  v.setUint32(24,rate,true);v.setUint32(28,rate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,pcm.length,true);
  return new Blob([h,pcm],{type:'audio/wav'});}
+function mp3Blob(pcm){const s=new Int16Array(pcm.buffer,pcm.byteOffset,pcm.length>>1);const e=new lamejs.Mp3Encoder(1,24000,128);const out=[];
+ for(let i=0;i<s.length;i+=1152){const b=e.encodeBuffer(s.subarray(i,i+1152));if(b.length)out.push(new Uint8Array(b));}
+ const f=e.flush();if(f.length)out.push(new Uint8Array(f));return new Blob(out,{type:'audio/mpeg'});}
+const join=b=>{const n=b.reduce((a,x)=>a+x.length,0),o=new Uint8Array(n);let i=0;b.forEach(x=>{o.set(x,i);i+=x.length;});return o;};
 
 async function generate(){
- const text=$('txt').value.trim(),key=$('key').value.trim();
- if(!text)return $('status').textContent='⚠️ पहले text लिखें';
- if(!key)return $('status').textContent='⚠️ नीचे API Key डालें';
- localStorage.setItem('tts_key',key);
- $('go').disabled=true;$('dl').style.display='none';
- try{const cs=chunks(text),bufs=[];
-  for(let i=0;i<cs.length;i++){$('status').textContent=`⏳ आवाज़ बन रही है... (${i+1}/${cs.length})`;bufs.push(await tts(cs[i],key,$('voice').value,$('model').value,$('style').value.trim()));}
-  const len=bufs.reduce((a,b)=>a+b.length,0),all=new Uint8Array(len);let o=0;bufs.forEach(b=>{all.set(b,o);o+=b.length;});
-  if(blobUrl)URL.revokeObjectURL(blobUrl);blobUrl=URL.createObjectURL(wav(all));
-  $('player').src=blobUrl;$('player').style.display='block';$('dl').style.display='block';$('player').play();
-  $('status').textContent=`✅ तैयार! (${Math.round(len/48000)} सेकंड)`;
- }catch(e){$('status').textContent='❌ '+e.message;}
- $('go').disabled=false;}
+ const text=$('txt').value.trim();if(!text)return st('⚠️ पहले text लिखें');
+ if($('key').value.trim())localStorage.setItem('tts_key',$('key').value.trim());
+ STOP=false;$('go').disabled=true;$('after').classList.add('hide');
+ try{
+  if(MODE==1&&$('voice').value==='__mine')await genClone(text);
+  else{
+   if(!key())throw new Error('API Key नहीं मिली — नीचे डालें');
+   let speech,cs;
+   if(MODE==2){const n1=$('sp1').value.trim()||'A',n2=$('sp2').value.trim()||'B';
+    speech={multiSpeakerVoiceConfig:{speakerVoiceConfigs:[{speaker:n1,voiceConfig:{prebuiltVoiceConfig:{voiceName:$('v1').value}}},{speaker:n2,voiceConfig:{prebuiltVoiceConfig:{voiceName:$('v2').value}}}]}};
+    cs=chunks(text,1000);}
+   else{speech={voiceConfig:{prebuiltVoiceConfig:{voiceName:$('voice').value}}};cs=chunks(text,1200);}
+   const pre=instr(),bufs=[];$('stopb').classList.remove('hide');$('after').classList.remove('hide');
+   for(let i=0;i<cs.length;i++){if(STOP)break;st(`⏳ आवाज़ बन रही है... (${i+1}/${cs.length})`);prog(i/cs.length*100);bufs.push(await gemini(pre+cs[i],speech));}
+   let pcm=join(bufs);if($('desil').checked)pcm=desilencePCM(pcm);LAST={pcm,mp3:null};
+   $('player').src=URL.createObjectURL(wavBlob(pcm));
+   st(`✅ तैयार! (${Math.round(pcm.length/48000)} सेकंड)${STOP?' — बीच में रोका':''}`);}
+  $('player').classList.remove('hide');$('after').classList.remove('hide');$('stopb').classList.add('hide');$('player').play();
+  addHist(text);
+ }catch(e){st('❌ '+e.message);}
+ prog(null);$('go').disabled=false;}
 
-function download(){const a=document.createElement('a');a.href=blobUrl;a.download='voice_'+$('voice').value+'_'+Date.now()+'.wav';a.click();}
+function download(){if(!LAST)return;let b,ext;
+ if(LAST.mp3){b=LAST.mp3;ext='mp3';}else if($('fmt').value==='mp3'){b=mp3Blob(LAST.pcm);ext='mp3';}else{b=wavBlob(LAST.pcm);ext='wav';}
+ const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='awaaz_'+Date.now()+'.'+ext;a.click();}
+
+async function preview(){const v=$('voice').value;if(v==='__mine'){if(!localStorage.getItem('tts_clone_id'))return st('पहले अपनी आवाज़ का क्लोन बनाएँ');
+ try{st('⏳ नमूना...');const b=await elTTS('नमस्ते, यह मेरी अपनी आवाज़ है।');$('player').src=URL.createObjectURL(b);$('player').classList.remove('hide');$('player').play();st('');}catch(e){st('❌ '+e.message);}return;}
+ if(!key())return st('⚠️ API Key डालें');
+ try{st('⏳ नमूना बन रहा है...');const p=await gemini(instr()+'नमस्ते! मैं '+v+' हूँ। यह मेरी आवाज़ का एक छोटा सा नमूना है।',{voiceConfig:{prebuiltVoiceConfig:{voiceName:v}}});
+  $('player').src=URL.createObjectURL(wavBlob(p));$('player').classList.remove('hide');$('player').play();st('');}catch(e){st('❌ '+e.message);}}
+
+/* ---- Voice clone (ElevenLabs) ---- */
+let mr=null;
+async function record(){if(mr&&mr.state==='recording'){mr.stop();return;}
+ try{const s=await navigator.mediaDevices.getUserMedia({audio:true});const ch=[];mr=new MediaRecorder(s);
+  mr.ondataavailable=e=>ch.push(e.data);mr.onstop=()=>{recBlob=new Blob(ch,{type:mr.mimeType});s.getTracks().forEach(t=>t.stop());$('recplay').src=URL.createObjectURL(recBlob);$('recplay').classList.remove('hide');$('rec').textContent='⏺️ दोबारा रिकॉर्ड करें';};
+  mr.start();$('rec').textContent='⏹ रिकॉर्डिंग रोकें';}catch(e){$('clonest').textContent='❌ माइक की अनुमति नहीं मिली';}}
+async function makeClone(){const k=$('elkey').value.trim();if(!k)return $('clonest').textContent='⚠️ ElevenLabs API Key डालें';
+ localStorage.setItem('tts_elkey',k);const f=$('sample').files[0]||recBlob;if(!f)return $('clonest').textContent='⚠️ पहले आवाज़ रिकॉर्ड या upload करें';
+ $('clonest').textContent='⏳ क्लोन बन रहा है...';const fd=new FormData();fd.append('name','My Voice '+Date.now());fd.append('files',f,f.name||'sample.webm');
+ const r=await fetch('https://api.elevenlabs.io/v1/voices/add',{method:'POST',headers:{'xi-api-key':k},body:fd});const j=await r.json().catch(()=>({}));
+ if(r.ok&&j.voice_id){localStorage.setItem('tts_clone_id',j.voice_id);$('clonest').textContent='✅ आपकी आवाज़ तैयार! अब "आवाज़ बनाएँ" दबाएँ।';}
+ else $('clonest').textContent='❌ '+(j?.detail?.message||JSON.stringify(j.detail||j)||r.status);}
+async function elTTS(text){const k=localStorage.getItem('tts_elkey')||$('elkey').value.trim(),id=localStorage.getItem('tts_clone_id');
+ const sp=[0.8,0.9,1,1.1,1.2][+$('speed').value];
+ const r=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${id}?output_format=mp3_44100_128`,{method:'POST',headers:{'xi-api-key':k,'Content-Type':'application/json'},
+  body:JSON.stringify({text,model_id:'eleven_multilingual_v2',voice_settings:{stability:0.5,similarity_boost:0.85,speed:sp}})});
+ if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j?.detail?.message||('ElevenLabs error '+r.status));}return await r.blob();}
+async function genClone(text){if(!localStorage.getItem('tts_clone_id'))throw new Error('पहले "मेरी आवाज़ क्लोन बनाएँ" करें');
+ const cs=chunks(text,2500),parts=[];for(let i=0;i<cs.length;i++){if(STOP)break;st(`⏳ आपकी आवाज़ में... (${i+1}/${cs.length})`);prog(i/cs.length*100);parts.push(await elTTS(cs[i]));}
+ const b=new Blob(parts,{type:'audio/mpeg'});LAST={mp3:b};$('player').src=URL.createObjectURL(b);st('✅ तैयार! (आपकी आवाज़)');}
+
+/* ---- Silence removal ---- */
+function cutSilence(f,rate,thDb,minSec,keepSec){ // f: Float32Array mono
+ const th=Math.pow(10,thDb/20),win=Math.round(rate*0.02),minW=Math.ceil(minSec/0.02),keep=Math.round(rate*keepSec);
+ const n=Math.ceil(f.length/win),loud=new Uint8Array(n);
+ for(let i=0;i<n;i++){let s=0,c=0;for(let j=i*win;j<Math.min(f.length,(i+1)*win);j++){s+=f[j]*f[j];c++;}loud[i]=Math.sqrt(s/c)>th?1:0;}
+ const out=[];let i=0;
+ while(i<n){if(loud[i]){let j=i;while(j<n&&loud[j])j++;out.push([i*win,Math.min(f.length,j*win)]);i=j;}
+  else{let j=i;while(j<n&&!loud[j])j++;const len=j-i;
+   if(len<minW||i===0||j===n){if(i>0&&j<n)out.push([i*win,j*win]);}
+   else out.push([i*win,i*win+keep]);
+   i=j;}}
+ let tot=0;out.forEach(([a,b])=>tot+=b-a);const r=new Float32Array(tot);let o=0;
+ out.forEach(([a,b])=>{r.set(f.subarray(a,b),o);o+=b-a;});return r;}
+function desilencePCM(pcm){const s=new Int16Array(pcm.buffer,pcm.byteOffset,pcm.length>>1);const f=new Float32Array(s.length);
+ for(let i=0;i<s.length;i++)f[i]=s[i]/32768;const c=cutSilence(f,24000,-42,0.5,0.3);
+ const o=new Int16Array(c.length);for(let i=0;i<c.length;i++)o[i]=Math.max(-32768,Math.min(32767,c[i]*32768));return new Uint8Array(o.buffer);}
+let SOUT=null;
+async function silenceTool(){const file=$('sfile').files[0];if(!file)return $('sst').textContent='⚠️ पहले फ़ाइल चुनें';
+ try{$('sst').textContent='⏳ फ़ाइल पढ़ रहा है...';const ac=new (window.AudioContext||window.webkitAudioContext)();
+  const buf=await ac.decodeAudioData(await file.arrayBuffer());const rate=buf.sampleRate,L=buf.length;const f=new Float32Array(L);
+  for(let c=0;c<buf.numberOfChannels;c++){const d=buf.getChannelData(c);for(let i=0;i<L;i++)f[i]+=d[i]/buf.numberOfChannels;}
+  $('sst').textContent='⏳ खामोशी हटा रहा है...';await new Promise(r=>setTimeout(r,30));
+  const c=cutSilence(f,rate,+$('sth').value,+$('smin').value,0.25);
+  const s16=new Int16Array(c.length);for(let i=0;i<c.length;i++)s16[i]=Math.max(-32768,Math.min(32767,c[i]*32768));
+  $('sst').textContent='⏳ MP3 बना रहा है...';await new Promise(r=>setTimeout(r,30));
+  const e=new lamejs.Mp3Encoder(1,rate,128),out=[];for(let i=0;i<s16.length;i+=1152){const b=e.encodeBuffer(s16.subarray(i,i+1152));if(b.length)out.push(new Uint8Array(b));}
+  const fl=e.flush();if(fl.length)out.push(new Uint8Array(fl));SOUT=new Blob(out,{type:'audio/mpeg'});
+  $('splay').src=URL.createObjectURL(SOUT);$('splay').classList.remove('hide');$('sdl').classList.remove('hide');
+  $('sst').textContent=`✅ ${(L/rate).toFixed(1)} सेकंड → ${(c.length/rate).toFixed(1)} सेकंड (${((L-c.length)/rate).toFixed(1)} सेकंड खामोशी हटी)`;
+ }catch(err){$('sst').textContent='❌ यह फ़ाइल नहीं पढ़ी जा सकी: '+err.message;}}
+function sDownload(){if(!SOUT)return;const a=document.createElement('a');a.href=URL.createObjectURL(SOUT);a.download='no_silence_'+Date.now()+'.mp3';a.click();}
+
+/* ---- History ---- */
+function addHist(t){let h=JSON.parse(localStorage.getItem('tts_hist')||'[]');h=h.filter(x=>x!==t);h.unshift(t);localStorage.setItem('tts_hist',JSON.stringify(h.slice(0,15)));showHist();}
+function showHist(){const h=JSON.parse(localStorage.getItem('tts_hist')||'[]');$('hist').innerHTML=h.length?'':'<div style="color:#999">अभी कुछ नहीं</div>';
+ h.forEach(t=>{const d=document.createElement('div');d.textContent='📝 '+t.slice(0,80)+(t.length>80?'…':'');d.onclick=()=>{$('txt').value=t;cnt();scrollTo(0,0);};$('hist').appendChild(d);});}
 </script>
 </body>
 </html>
